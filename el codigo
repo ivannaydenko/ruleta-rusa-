@@ -1,0 +1,231 @@
+import tkinter as tk
+from tkinter import ttk, messagebox
+import mysql.connector
+
+# -------------------- CONEXIÓN --------------------
+def conectar():
+    return mysql.connector.connect(
+        host='localhost',
+        user='root',
+        password='',
+        database='biblioteca'
+    )
+
+# -------------------- CONSULTAS --------------------
+def consultar_libros_mas_populares():
+    conexion = conectar()
+    cursor = conexion.cursor()
+    cursor.execute("SELECT titulo, calificacion FROM libros WHERE calificacion >= 4 ORDER BY calificacion DESC")
+    resultado = cursor.fetchall()
+    cursor.close()
+    conexion.close()
+    return resultado
+
+def seleccionar_todos_los_libros():
+    conexion = conectar()
+    cursor = conexion.cursor()
+    cursor.execute("SELECT * FROM libros ORDER BY titulo")
+    resultado = cursor.fetchall()
+    cursor.close()
+    conexion.close()
+    return resultado
+
+def agregar_libro(titulo, autor, genero, publicacion, cantidad_disponible, calificacion):
+    try:
+        conexion = conectar()
+        cursor = conexion.cursor()
+        SQL = "INSERT INTO libros (titulo, autor, genero, publicacion, cantidad_disponible, calificacion) VALUES (%s, %s, %s, %s, %s, %s)"
+        valores = (titulo, autor, genero, publicacion, cantidad_disponible, calificacion)
+        cursor.execute(SQL, valores)
+        conexion.commit()
+        cursor.close()
+        conexion.close()
+        messagebox.showinfo("Éxito", "Libro agregado correctamente.")
+    except Exception as e:
+        messagebox.showerror("Error", f"No se pudo agregar el libro.\n{e}")
+
+def eliminar_libro(id_libro):
+    try:
+        conexion = conectar()
+        cursor = conexion.cursor()
+        cursor.execute("DELETE FROM libros WHERE id_libro = %s", (id_libro,))
+        conexion.commit()
+        cursor.close()
+        conexion.close()
+        messagebox.showinfo("Eliminado", "Libro eliminado correctamente.")
+    except Exception as e:
+        messagebox.showerror("Error", f"No se pudo eliminar el libro.\n{e}")
+
+def buscar_libro_por_titulo(titulo):
+    libros = seleccionar_todos_los_libros()
+    inicio, fin = 0, len(libros) - 1
+    while inicio <= fin:
+        medio = (inicio + fin) // 2
+        titulo_medio = libros[medio][1]
+        if titulo_medio == titulo:
+            return libros[medio]
+        elif titulo_medio < titulo:
+            inicio = medio + 1
+        else:
+            fin = medio - 1
+    return None
+
+# -------------------- FUNCIÓN NUEVA — LIBRO MÁS ANTIGUO --------------------
+def libro_mas_antiguo():
+    conexion = conectar()
+    cursor = conexion.cursor()
+    cursor.execute("SELECT * FROM libros ORDER BY publicacion ASC LIMIT 1")
+    libro = cursor.fetchone()
+    cursor.close()
+    conexion.close()
+    return libro
+
+def ventana_libro_mas_antiguo():
+    win = tk.Toplevel(ventana)
+    win.title("📘 Libro Más Antiguo")
+    win.geometry("450x350")
+    win.configure(bg="#e8f0ff")
+
+    libro = libro_mas_antiguo()
+
+    if libro is None:
+        tk.Label(win, text="No hay libros en la base de datos.",
+                 font=("Arial", 14, "bold"), bg="#e8f0ff").pack(pady=40)
+        return
+
+    frame = tk.Frame(win, bg="white", bd=3, relief="groove")
+    frame.pack(pady=25, padx=25, fill="both", expand=True)
+
+    tk.Label(frame, text="📚 Libro Más Antiguo",
+             font=("Arial", 16, "bold"), bg="white").pack(pady=10)
+
+    tk.Frame(frame, bg="#aac4ff", height=2).pack(fill="x", pady=5)
+
+    info_text = (
+        f"📖 Título: {libro[1]}\n"
+        f"✍ Autor: {libro[2]}\n"
+        f"🏷 Género: {libro[3]}\n"
+        f"📅 Publicado en: {libro[4]}\n"
+        f"📦 Disponible: {libro[5]}\n"
+        f"⭐ Calificación: {libro[6]}"
+    )
+
+    tk.Label(frame, text=info_text, font=("Arial", 12),
+             justify="left", bg="white").pack(pady=10)
+
+    tk.Button(win, text="Cerrar", font=("Arial", 12, "bold"),
+              bg="#aac4ff", fg="black", width=12,
+              command=win.destroy).pack(pady=10)
+
+# -------------------- INTERFAZ TKINTER --------------------
+ventana = tk.Tk()
+ventana.title("Sistema de Biblioteca")
+ventana.geometry("700x500")
+ventana.config(bg="#f0f0f0")
+
+# -------------------- FUNCIONES DE LA GUI --------------------
+def mostrar_libros_populares():
+    for row in tabla.get_children():
+        tabla.delete(row)
+    libros = consultar_libros_mas_populares()
+    for libro in libros:
+        tabla.insert("", "end", values=(libro[0], libro[1]))
+
+def mostrar_todos_libros():
+    for row in tabla.get_children():
+        tabla.delete(row)
+    libros = seleccionar_todos_los_libros()
+    for libro in libros:
+        tabla.insert("", "end", values=(libro[0], libro[1], libro[2], libro[3], libro[4], libro[5], libro[6]))
+
+def ventana_agregar_libro():
+    win = tk.Toplevel(ventana)
+    win.title("Agregar Libro")
+    win.geometry("400x400")
+    campos = ["Título", "Autor", "Género", "Publicación (AAAA-MM-DD)", "Cantidad", "Calificación (1-5)"]
+    entradas = []
+
+    for i, campo in enumerate(campos):
+        tk.Label(win, text=campo).pack()
+        entrada = tk.Entry(win)
+        entrada.pack()
+        entradas.append(entrada)
+
+    def guardar():
+        datos = [e.get() for e in entradas]
+        if any(d == "" for d in datos):
+            messagebox.showwarning("Atención", "Complete todos los campos.")
+            return
+        agregar_libro(*datos)
+        win.destroy()
+
+    tk.Button(win, text="Guardar", command=guardar, bg="#4CAF50", fg="white").pack(pady=10)
+
+def ventana_eliminar_libro():
+    win = tk.Toplevel(ventana)
+    win.title("Eliminar Libro")
+    win.geometry("400x300")
+
+    libros = seleccionar_todos_los_libros()
+    lista = ttk.Treeview(win, columns=("ID", "Título"), show="headings")
+    lista.heading("ID", text="ID")
+    lista.heading("Título", text="Título")
+    lista.pack(fill="both", expand=True)
+
+    for libro in libros:
+        lista.insert("", "end", values=(libro[0], libro[1]))
+
+    def eliminar():
+        seleccionado = lista.selection()
+        if not seleccionado:
+            messagebox.showwarning("Atención", "Seleccione un libro para eliminar.")
+            return
+        id_libro = lista.item(seleccionado)["values"][0]
+        eliminar_libro(id_libro)
+        win.destroy()
+
+    tk.Button(win, text="Eliminar", command=eliminar, bg="#e74c3c", fg="white").pack(pady=10)
+
+def ventana_buscar_libro():
+    win = tk.Toplevel(ventana)
+    win.title("Buscar Libro")
+    win.geometry("400x200")
+
+    tk.Label(win, text="Título del libro:").pack(pady=5)
+    entrada = tk.Entry(win)
+    entrada.pack()
+
+    def buscar():
+        titulo = entrada.get()
+        resultado = buscar_libro_por_titulo(titulo)
+        if resultado:
+            messagebox.showinfo("Resultado", f"Libro encontrado:\n\n{resultado}")
+        else:
+            messagebox.showinfo("Resultado", "Libro no encontrado.")
+
+    tk.Button(win, text="Buscar", command=buscar, bg="#3498db", fg="white").pack(pady=10)
+
+# -------------------- BOTONES PRINCIPALES --------------------
+frame_botones = tk.Frame(ventana, bg="#f0f0f0")
+frame_botones.pack(pady=10)
+
+botones = [
+    ("Ver Libros Populares", mostrar_libros_populares),
+    ("Mostrar Todos", mostrar_todos_libros),
+    ("Agregar Libro", ventana_agregar_libro),
+    ("Eliminar Libro", ventana_eliminar_libro),
+    ("Buscar Libro", ventana_buscar_libro),
+    ("Libro Más Antiguo", ventana_libro_mas_antiguo)  # ← AGREGADO
+]
+
+for texto, comando in botones:
+    tk.Button(frame_botones, text=texto, command=comando, width=20, height=2, bg="#2980b9", fg="white", relief="raised").pack(side="left", padx=5)
+
+# -------------------- TABLA DE DATOS --------------------
+columnas = ("ID", "Título", "Autor", "Género", "Publicación", "Cantidad", "Calificación")
+tabla = ttk.Treeview(ventana, columns=columnas, show="headings")
+for col in columnas:
+    tabla.heading(col, text=col)
+tabla.pack(fill="both", expand=True, pady=10)
+
+ventana.mainloop()
